@@ -4,6 +4,7 @@ import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 
 interface VRPlayerProps {
   videoElement: HTMLVideoElement | null;
+  compatibilityMode: boolean;
 }
 
 export default function VRPlayer(props: VRPlayerProps) {
@@ -13,7 +14,6 @@ export default function VRPlayer(props: VRPlayerProps) {
   onMount(() => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
-    // Camera is at origin
     camera.position.set(0, 0, 0);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -22,9 +22,14 @@ export default function VRPlayer(props: VRPlayerProps) {
     renderer.xr.enabled = true;
     containerRef.appendChild(renderer.domElement);
 
-    // Setup VR Button
+    // Detect the GPU's hard max texture size limit
+    const gl = renderer.getContext();
+    const MAX_TEXTURE = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    // Stay safely under the limit (leave headroom)
+    const SAFE_MAX = Math.min(MAX_TEXTURE - 256, 3840);
+
+    // Style and add the VR button
     const vrButton = VRButton.createButton(renderer);
-    // Add custom styling to VR button
     vrButton.style.zIndex = '100';
     vrButton.style.bottom = '20px';
     vrButton.style.left = '50%';
@@ -40,7 +45,6 @@ export default function VRPlayer(props: VRPlayerProps) {
     vrButton.style.fontWeight = '600';
     vrButton.style.cursor = 'pointer';
     vrButton.style.transition = 'all 0.3s ease';
-
     containerRef.appendChild(vrButton);
 
     const handleResize = () => {
@@ -50,63 +54,124 @@ export default function VRPlayer(props: VRPlayerProps) {
     };
     window.addEventListener('resize', handleResize);
 
-    let videoTexture: THREE.VideoTexture | undefined;
+    // Offscreen canvas used in compatibility mode
+    let offscreenCanvas: HTMLCanvasElement | null = null;
+    let offscreenCtx: CanvasRenderingContext2D | null = null;
+
+    let currentTexture: THREE.VideoTexture | THREE.CanvasTexture | undefined;
     let sphereMesh: THREE.Mesh | undefined;
+    // Track the animation frame handle for the compat mode loop
+    let compatRafId: number | null = null;
+
+    const stopCompatLoop = () => {
+      if (compatRafId !== null) {
+        cancelAnimationFrame(compatRafId);
+        compatRafId = null;
+      }
+    };
+
+    // Drives the offscreen canvas drawing loop for compatibility mode
+    const startCompatLoop = (video: HTMLVideoElement) => {
+      stopCompatLoop();
+      const draw = () => {
+        if (!offscreenCtx || !offscreenCanvas || video.paused || video.ended) {
+          compatRafId = requestAnimationFrame(draw);
+          return;
+        }
+        // Draw the video frame scaled to the safe canvas dimensions
+        offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+        if (currentTexture) {
+          currentTexture.needsUpdate = true;
+        }
+        compatRafId = requestAnimationFrame(draw);
+      };
+      compatRafId = requestAnimationFrame(draw);
+    };
+
+    const buildSphere = (texture: THREE.VideoTexture | THREE.CanvasTexture) => {
+      if (sphereMesh) scene.remove(sphereMesh);
+      const geometry = new THREE.SphereGeometry(500, 60, 40);
+      geometry.scale(-1, 1, 1); // Invert so faces point inward
+      const material = new THREE.MeshBasicMaterial({ map: texture });
+      sphereMesh = new THREE.Mesh(geometry, material);
+      scene.add(sphereMesh);
+    };
 
     createEffect(() => {
-      if (props.videoElement) {
-        if (sphereMesh) {
-          scene.remove(sphereMesh);
+      const video = props.videoElement;
+      const compat = props.compatibilityMode;
+
+      if (!video) return;
+
+      stopCompatLoop();
+
+      if (compat) {
+        // --- COMPATIBILITY MODE: Route through offscreen canvas ---
+        // Calculate safe canvas dimensions matching video's aspect ratio
+        const vidW = video.videoWidth || 3840;
+        const vidH = video.videoHeight || 1920;
+        const aspect = vidW / vidH;
+
+        let canvasW = Math.min(vidW, SAFE_MAX);
+        let canvasH = Math.round(canvasW / aspect);
+
+        // If height still exceeds limit, clamp that too
+        if (canvasH > SAFE_MAX) {
+          canvasH = SAFE_MAX;
+          canvasW = Math.round(canvasH * aspect);
         }
 
-        const geometry = new THREE.SphereGeometry(500, 60, 40);
-        // Invert geometry on x-axis so that all faces point inward
-        geometry.scale(-1, 1, 1);
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = canvasW;
+        offscreenCanvas.height = canvasH;
+        offscreenCtx = offscreenCanvas.getContext('2d');
 
-        videoTexture = new THREE.VideoTexture(props.videoElement);
-        videoTexture.colorSpace = THREE.SRGBColorSpace;
-        
-        const material = new THREE.MeshBasicMaterial({ map: videoTexture });
-        sphereMesh = new THREE.Mesh(geometry, material);
-        scene.add(sphereMesh);
+        currentTexture = new THREE.CanvasTexture(offscreenCanvas);
+        currentTexture.colorSpace = THREE.SRGBColorSpace;
+        buildSphere(currentTexture);
+        startCompatLoop(video);
+      } else {
+        // --- NORMAL MODE: Standard VideoTexture (efficient, full quality) ---
+        offscreenCanvas = null;
+        offscreenCtx = null;
+        currentTexture = new THREE.VideoTexture(video);
+        currentTexture.colorSpace = THREE.SRGBColorSpace;
+        buildSphere(currentTexture);
       }
     });
 
-    // Add lighting just in case, though MeshBasicMaterial doesn't strictly need it
     const light = new THREE.AmbientLight(0xffffff, 1);
     scene.add(light);
 
-    // Render loop
     const render = () => {
-      if (renderer) {
-        renderer.render(scene, camera);
-      }
+      if (renderer) renderer.render(scene, camera);
     };
     renderer.setAnimationLoop(render);
 
     onCleanup(() => {
+      stopCompatLoop();
       window.removeEventListener('resize', handleResize);
       if (renderer) {
         renderer.setAnimationLoop(null);
         renderer.dispose();
       }
-      containerRef.innerHTML = ''; // Clean up dom
+      containerRef.innerHTML = '';
     });
   });
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
         width: '100%',
         height: '100%',
-        "z-index": 10,
+        'z-index': 10,
         background: '#000',
-        overflow: 'hidden'
-      }} 
+        overflow: 'hidden',
+      }}
     />
   );
 }

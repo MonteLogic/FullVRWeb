@@ -4,12 +4,13 @@ import VRPlayer from './components/VRPlayer';
 import RecentVideosDropdown from './components/RecentVideosDropdown';
 import { saveVideoMetadata, updateVideoTime, supportsFileSystemAccess } from './lib/storage';
 import type { VideoMetadata } from './lib/storage';
-import { Upload } from 'lucide-solid';
+import { Upload, Smartphone } from 'lucide-solid';
 
 function App() {
   const [videoElement, setVideoElement] = createSignal<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [currentVideoId, setCurrentVideoId] = createSignal<string | null>(null);
+  const [compatibilityMode, setCompatibilityMode] = createSignal(false);
 
   let hiddenVideoRef!: HTMLVideoElement;
 
@@ -18,7 +19,7 @@ function App() {
     hiddenVideoRef.src = url;
     hiddenVideoRef.currentTime = startTime;
     hiddenVideoRef.play();
-    
+
     setVideoElement(hiddenVideoRef);
     setIsPlaying(true);
     setCurrentVideoId(file.name);
@@ -67,7 +68,6 @@ function App() {
   const handleResumeVideo = async (meta: VideoMetadata) => {
     try {
       if (meta.handle && supportsFileSystemAccess) {
-        // Request permission if not already granted
         const options: FileSystemHandlePermissionDescriptor = { mode: 'read' };
         if ((await meta.handle.queryPermission(options)) !== 'granted') {
           const permission = await meta.handle.requestPermission(options);
@@ -76,7 +76,6 @@ function App() {
             return;
           }
         }
-        
         const file = await meta.handle.getFile();
         await loadVideoFile(file, meta.handle, meta.lastTime);
       }
@@ -96,7 +95,6 @@ function App() {
         }
       }, 5000);
     }
-    
     onCleanup(() => {
       if (interval) clearInterval(interval);
     });
@@ -104,9 +102,9 @@ function App() {
 
   return (
     <div class="app-container">
-      <video 
-        ref={hiddenVideoRef} 
-        style={{ display: 'none' }} 
+      <video
+        ref={hiddenVideoRef}
+        style={{ display: 'none' }}
         crossorigin="anonymous"
         loop
         playsinline
@@ -116,8 +114,28 @@ function App() {
         <div class="hero-section">
           <div class="glass-panel">
             <h1>Immersive VR Player</h1>
-            <p>Experience your local 360° & VR videos with zero lag.</p>
-            
+            <p>Experience your local 360° &amp; VR videos with zero lag.</p>
+
+            {/* Compatibility Mode Toggle */}
+            <div class="compat-toggle-row">
+              <div class="compat-label">
+                <Smartphone size={16} />
+                <span>Mobile Compatibility Mode</span>
+              </div>
+              <button
+                class={`toggle-btn ${compatibilityMode() ? 'active' : ''}`}
+                onClick={() => setCompatibilityMode(v => !v)}
+                title="Enable this on phones to fix 4K VR black screen issues"
+              >
+                <span class="toggle-knob" />
+              </button>
+            </div>
+            <Show when={compatibilityMode()}>
+              <p class="compat-hint">
+                ⚡ Enabled — 4K videos will be downscaled to fit your GPU. Fixes black screen on mobile.
+              </p>
+            </Show>
+
             <div class="actions">
               <Show when={supportsFileSystemAccess} fallback={
                 <label class="btn-primary">
@@ -137,8 +155,8 @@ function App() {
           </div>
         </div>
       }>
-        <VRPlayer videoElement={videoElement()} />
-        <button 
+        <VRPlayer videoElement={videoElement()} compatibilityMode={compatibilityMode()} />
+        <button
           class="btn-close"
           onClick={() => {
             hiddenVideoRef.pause();
