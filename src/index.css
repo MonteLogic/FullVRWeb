@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* System font stack — avoids COEP cross-origin block on Google Fonts CDN */
 
 :root {
   --bg-color: #0f172a;
@@ -17,7 +17,7 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-primary);
   min-height: 100vh;
@@ -453,3 +453,239 @@ button:hover, .btn-primary:hover {
 .ctrl-mute {
   opacity: 0.8;
 }
+
+/* ── Convert button ──────────────────────────────────────────── */
+.btn-convert {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border: none;
+  box-shadow: 0 4px 15px rgba(124,58,237,0.4);
+}
+.btn-convert:hover {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  box-shadow: 0 6px 20px rgba(124,58,237,0.5);
+}
+
+/* ── Converter Modal Overlay ────────────────────────────────── */
+.conv-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.conv-panel {
+  background: rgba(15, 23, 42, 0.97);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 560px;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: fadeIn 0.25s ease;
+}
+
+.conv-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.conv-header h2 {
+  font-size: 1.5rem;
+  background: linear-gradient(to right, #a78bfa, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+.conv-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0;
+}
+
+.icon-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 0.4rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover { background: rgba(255,255,255,0.15); transform: none; box-shadow: none; }
+
+/* Drop Zone */
+.conv-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  border: 2px dashed rgba(255,255,255,0.2);
+  border-radius: 16px;
+  padding: 2rem 1rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: border-color 0.2s, background 0.2s;
+  text-align: center;
+}
+
+.conv-dropzone:hover, .conv-dropzone.dragging {
+  border-color: #7c3aed;
+  background: rgba(124,58,237,0.08);
+  color: var(--text-primary);
+}
+
+.conv-dropzone.has-file {
+  border-color: #3b82f6;
+  background: rgba(59,130,246,0.06);
+}
+
+.conv-file-info { display: flex; flex-direction: column; gap: 0.25rem; }
+.conv-filename { font-weight: 600; color: var(--text-primary); word-break: break-all; }
+.conv-filesize { font-size: 0.8rem; color: var(--text-secondary); }
+
+/* Error */
+.conv-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  color: #fca5a5;
+  font-size: 0.875rem;
+}
+
+.conv-actions { display: flex; justify-content: center; }
+
+.conv-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+/* Progress */
+.conv-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.conv-status-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.conv-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.conv-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #3b82f6);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.conv-progress-pct {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-cancel {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-cancel:hover { background: rgba(239,68,68,0.2); color: #fca5a5; transform: none; box-shadow: none; }
+
+/* Done */
+.conv-done-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: center;
+}
+
+.conv-done-icon { color: #34d399; }
+.conv-done-section h3 { font-size: 1.25rem; margin: 0; }
+
+.conv-size-compare {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255,255,255,0.05);
+  border-radius: 14px;
+  padding: 1rem 1.5rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.conv-size-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.conv-size-box strong { font-size: 1.1rem; color: var(--text-primary); }
+.conv-size-box small  { font-size: 0.72rem; }
+.conv-arrow { font-size: 1.5rem; color: var(--text-secondary); }
+
+.conv-savings {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 99px;
+}
+
+.savings-positive { background: rgba(52,211,153,0.15); color: #34d399; }
+.savings-negative { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.75rem 1.5rem;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-secondary:hover { background: rgba(255,255,255,0.14); transform: none; box-shadow: none; }

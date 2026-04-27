@@ -3,9 +3,10 @@ import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import VRPlayer from './components/VRPlayer';
 import PlayerControls from './components/PlayerControls';
 import RecentVideosDropdown from './components/RecentVideosDropdown';
+import Converter from './components/Converter';
 import { saveVideoMetadata, updateVideoTime, supportsFileSystemAccess } from './lib/storage';
 import type { VideoMetadata } from './lib/storage';
-import { Upload, Smartphone } from 'lucide-solid';
+import { Upload, Smartphone, Shuffle } from 'lucide-solid';
 
 // FOV clamp limits (degrees). Lower = more zoomed in, higher = wider view.
 const MIN_FOV = 30;
@@ -16,7 +17,8 @@ function App() {
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [currentVideoId, setCurrentVideoId] = createSignal<string | null>(null);
   const [compatibilityMode, setCompatibilityMode] = createSignal(false);
-  const [fov, setFov] = createSignal(60); // 60° feels natural on flat screens; wider in headset
+  const [fov, setFov] = createSignal(60);
+  const [showConverter, setShowConverter] = createSignal(false);
 
   let hiddenVideoRef!: HTMLVideoElement;
 
@@ -167,6 +169,11 @@ function App() {
               </Show>
 
               <RecentVideosDropdown onSelect={handleResumeVideo} />
+
+              <button class="btn-convert" onClick={() => setShowConverter(true)}>
+                <Shuffle size={18} />
+                <span>Convert AV1 → VP9</span>
+              </button>
             </div>
           </div>
         </div>
@@ -190,6 +197,11 @@ function App() {
         <button class="btn-close" onClick={exitPlayer}>
           Exit Player
         </button>
+      </Show>
+
+      {/* Converter modal — rendered outside the Show so it works on home screen */}
+      <Show when={showConverter()}>
+        <Converter onClose={() => setShowConverter(false)} />
       </Show>
     </div>
   );
