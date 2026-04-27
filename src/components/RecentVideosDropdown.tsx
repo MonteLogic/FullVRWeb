@@ -1,5 +1,5 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
-import { getRecentVideos, supportsFileSystemAccess } from '../lib/storage';
+import { getRecentVideos } from '../lib/storage';
 import type { VideoMetadata } from '../lib/storage';
 import { PlayCircle, Clock, FileVideo } from 'lucide-solid';
 
@@ -30,7 +30,7 @@ export default function RecentVideosDropdown(props: Props) {
   };
 
   return (
-    <Show when={recentVideos().length > 0 && supportsFileSystemAccess}>
+    <Show when={recentVideos().length > 0}>
       <div class="dropdown-container">
         <button 
           class="dropdown-trigger" 

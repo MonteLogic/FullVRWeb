@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Generate 360° Test Video</title>
+<style>
+  body { background: #0f172a; color: white; font-family: sans-serif; padding: 2rem; }
+  canvas { display: none; }
+  button { background: #3b82f6; color: white; border: none; padding: 0.75rem 1.5rem;
+           border-radius: 8px; cursor: pointer; font-size: 1rem; margin: 0.5rem; }
+  #log { background: #1e293b; padding: 1rem; border-radius: 8px; margin-top: 1rem;
+         font-family: monospace; font-size: 0.85rem; min-height: 4rem; }
+  h1 { color: #60a5fa; }
+</style>
+</head>
+<body>
+<h1>360° Equirectangular Test Video Generator</h1>
+<p>Generates test videos entirely in the browser — no FFmpeg needed.<br>
+   Each video has a compass grid so you can verify correct sphere mapping in the VR player.</p>
+
+<div>
+  <button onclick="generate(1920, 960, '1080p H.264-like', 30)">Generate 1080p (1920×960)</button>
+  <button onclick="generate(2880, 1440, '1440p', 30)">Generate 1440p (2880×1440)</button>
+  <button onclick="generate(3840, 1920, '4K', 24)">Generate 4K (3840×1920) — slow!</button>
+</div>
+<div id="log">Ready. Click a button to generate a test video.</div>
+<canvas id="c"></canvas>
+
+<script>
+async function generate(width, height, label, fps) {
+  const log = document.getElementById('log');
+  const canvas = document.getElementById('c');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  log.textContent = `Generating ${label} (${width}x${height})…`;
+
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, {
+    mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9' : 'video/webm',
+    videoBitsPerSecond: width * height * fps * 0.15,
+  });
+  const chunks = [];
+  recorder.ondataavailable = e => chunks.push(e.data);
+
+  const totalFrames = fps * 15; // 15 seconds
+  let frame = 0;
+
+  recorder.start();
+
+  const drawFrame = () => {
+    const t = frame / fps;
+    // Background
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, width, height);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(59,130,246,0.5)';
+    ctx.lineWidth = Math.max(2, width / 960);
+    const gw = width / 8, gh = height / 8;
+    for (let x = 0; x <= width; x += gw) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke(); }
+    for (let y = 0; y <= height; y += gh) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke(); }
+
+    // Equator highlight
+    ctx.strokeStyle = 'rgba(96,165,250,0.8)';
+    ctx.lineWidth = Math.max(3, width / 640);
+    ctx.beginPath(); ctx.moveTo(0, height/2); ctx.lineTo(width, height/2); ctx.stroke();
+
+    // Compass labels
+    const fsBig = Math.max(24, height / 14);
+    ctx.font = `bold ${fsBig}px sans-serif`;
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', width/2, gh);
+    ctx.fillText('S', width/2, height - gh);
+    ctx.fillText('W', gw/2, height/2);
+    ctx.fillText('E', width - gw/2, height/2);
+
+    // Center label
+    const fsMed = Math.max(16, height / 22);
+    ctx.font = `bold ${fsMed}px sans-serif`;
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillText(label, width/2, height/2 - fsMed * 1.5);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(`${width}x${height} — 360° Equirectangular`, width/2, height/2 - fsMed * 0.2);
+
+    // Timer
+    const fsSmall = Math.max(12, height / 32);
+    const mm = String(Math.floor(t/60)).padStart(2,'0');
+    const ss = String(Math.floor(t%60)).padStart(2,'0');
+    ctx.font = `${fsSmall}px monospace`;
+    ctx.fillStyle = 'yellow';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${mm}:${ss}`, width * 0.02, height * 0.05);
+
+    frame++;
+    if (frame < totalFrames) {
+      log.textContent = `Encoding frame ${frame}/${totalFrames}…`;
+      requestAnimationFrame(drawFrame);
+    } else {
+      recorder.stop();
+    }
+  };
+
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `360_${label.replace(/\s+/g,'_').toLowerCase()}.webm`;
+    a.click();
+    log.textContent = `✅ Done! File downloaded: 360_${label}.webm\nMove it to the test-videos/ folder and open it in the VR player.`;
+  };
+
+  requestAnimationFrame(drawFrame);
+}
+</script>
+</body>
+</html>

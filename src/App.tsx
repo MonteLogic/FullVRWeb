@@ -1,20 +1,34 @@
 /// <reference types="wicg-file-system-access" />
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import VRPlayer from './components/VRPlayer';
+import PlayerControls from './components/PlayerControls';
 import RecentVideosDropdown from './components/RecentVideosDropdown';
 import { saveVideoMetadata, updateVideoTime, supportsFileSystemAccess } from './lib/storage';
 import type { VideoMetadata } from './lib/storage';
 import { Upload, Smartphone } from 'lucide-solid';
+
+// FOV clamp limits (degrees). Lower = more zoomed in, higher = wider view.
+const MIN_FOV = 30;
+const MAX_FOV = 110;
 
 function App() {
   const [videoElement, setVideoElement] = createSignal<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [currentVideoId, setCurrentVideoId] = createSignal<string | null>(null);
   const [compatibilityMode, setCompatibilityMode] = createSignal(false);
+  const [fov, setFov] = createSignal(60); // 60° feels natural on flat screens; wider in headset
 
   let hiddenVideoRef!: HTMLVideoElement;
 
-  const loadVideoFile = async (file: File, handle: FileSystemFileHandle | null, startTime: number = 0) => {
+  const handleFovChange = (delta: number) => {
+    setFov(f => Math.min(MAX_FOV, Math.max(MIN_FOV, f + delta)));
+  };
+
+  const loadVideoFile = async (
+    file: File,
+    handle: FileSystemFileHandle | null,
+    startTime: number = 0
+  ) => {
     const url = URL.createObjectURL(file);
     hiddenVideoRef.src = url;
     hiddenVideoRef.currentTime = startTime;
@@ -24,64 +38,64 @@ function App() {
     setIsPlaying(true);
     setCurrentVideoId(file.name);
 
-    if (supportsFileSystemAccess) {
-      await saveVideoMetadata({
-        id: file.name,
-        filename: file.name,
-        lastTime: startTime,
-        duration: hiddenVideoRef.duration || 0,
-        lastWatched: Date.now(),
-        handle: handle,
-      });
-    }
+    // ALWAYS save metadata regardless of FS API support so recent videos work
+    await saveVideoMetadata({
+      id: file.name,
+      filename: file.name,
+      lastTime: startTime,
+      duration: hiddenVideoRef.duration || 0,
+      lastWatched: Date.now(),
+      handle: supportsFileSystemAccess ? handle : null,
+    });
   };
 
   const handleFileUpload = async (e: Event) => {
     const target = e.target as HTMLInputElement;
     if (target.files && target.files.length > 0) {
-      const file = target.files[0];
-      await loadVideoFile(file, null);
+      await loadVideoFile(target.files[0], null);
     }
   };
 
   const handleNativeFilePick = async () => {
     try {
-      if (supportsFileSystemAccess) {
-        const [fileHandle] = await window.showOpenFilePicker({
-          types: [
-            {
-              description: 'Videos',
-              accept: {
-                'video/*': ['.mp4', '.webm', '.mkv', '.avi'],
-              },
-            },
-          ],
-        });
-        const file = await fileHandle.getFile();
-        await loadVideoFile(file, fileHandle);
-      }
+      const [fileHandle] = await window.showOpenFilePicker({
+        types: [{ description: 'Videos', accept: { 'video/*': ['.mp4', '.webm', '.mkv', '.avi', '.mov'] } }],
+      });
+      const file = await fileHandle.getFile();
+      await loadVideoFile(file, fileHandle);
     } catch (err) {
-      console.log('User cancelled or error picking file', err);
+      console.log('File pick cancelled or failed:', err);
     }
   };
 
   const handleResumeVideo = async (meta: VideoMetadata) => {
     try {
       if (meta.handle && supportsFileSystemAccess) {
+        // Request file permission if needed
         const options: FileSystemHandlePermissionDescriptor = { mode: 'read' };
         if ((await meta.handle.queryPermission(options)) !== 'granted') {
-          const permission = await meta.handle.requestPermission(options);
-          if (permission !== 'granted') {
-            alert('Permission to read file was denied.');
+          if ((await meta.handle.requestPermission(options)) !== 'granted') {
+            alert('Permission denied.');
             return;
           }
         }
         const file = await meta.handle.getFile();
         await loadVideoFile(file, meta.handle, meta.lastTime);
+      } else {
+        // No stored handle (loaded via <input> or non-HTTPS) — ask user to re-pick
+        // We'll jump to the saved time automatically after they pick the file
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'video/*';
+        input.onchange = async (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (file) await loadVideoFile(file, null, meta.lastTime);
+        };
+        input.click();
       }
     } catch (error) {
       console.error('Error resuming video:', error);
-      alert('Could not resume video. The file may have been moved or deleted.');
+      alert('Could not resume. The file may have been moved or deleted.');
     }
   };
 
@@ -95,10 +109,14 @@ function App() {
         }
       }, 5000);
     }
-    onCleanup(() => {
-      if (interval) clearInterval(interval);
-    });
+    onCleanup(() => { if (interval) clearInterval(interval); });
   });
+
+  const exitPlayer = () => {
+    hiddenVideoRef.pause();
+    setVideoElement(null);
+    setIsPlaying(false);
+  };
 
   return (
     <div class="app-container">
@@ -114,7 +132,7 @@ function App() {
         <div class="hero-section">
           <div class="glass-panel">
             <h1>Immersive VR Player</h1>
-            <p>Experience your local 360° &amp; VR videos with zero lag.</p>
+            <p>Experience your local 360° &amp; VR videos in full immersion.</p>
 
             {/* Compatibility Mode Toggle */}
             <div class="compat-toggle-row">
@@ -125,15 +143,13 @@ function App() {
               <button
                 class={`toggle-btn ${compatibilityMode() ? 'active' : ''}`}
                 onClick={() => setCompatibilityMode(v => !v)}
-                title="Enable this on phones to fix 4K VR black screen issues"
+                title="Enable to fix 4K VR black screen on mobile GPUs"
               >
                 <span class="toggle-knob" />
               </button>
             </div>
             <Show when={compatibilityMode()}>
-              <p class="compat-hint">
-                ⚡ Enabled — 4K videos will be downscaled to fit your GPU. Fixes black screen on mobile.
-              </p>
+              <p class="compat-hint">⚡ On — 4K videos downscaled to fit your GPU. Fixes black screen on mobile.</p>
             </Show>
 
             <div class="actions">
@@ -155,15 +171,23 @@ function App() {
           </div>
         </div>
       }>
-        <VRPlayer videoElement={videoElement()} compatibilityMode={compatibilityMode()} />
-        <button
-          class="btn-close"
-          onClick={() => {
-            hiddenVideoRef.pause();
-            setVideoElement(null);
-            setIsPlaying(false);
-          }}
-        >
+        {/* 3D VR Sphere */}
+        <VRPlayer
+          videoElement={videoElement()}
+          compatibilityMode={compatibilityMode()}
+          fov={fov()}
+          onFovChange={handleFovChange}
+        />
+
+        {/* Playback controls — position:fixed, no wrapper needed */}
+        <PlayerControls
+          videoElement={videoElement()}
+          onZoomIn={() => handleFovChange(-10)}
+          onZoomOut={() => handleFovChange(10)}
+        />
+
+        {/* Exit button */}
+        <button class="btn-close" onClick={exitPlayer}>
           Exit Player
         </button>
       </Show>
